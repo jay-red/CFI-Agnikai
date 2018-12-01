@@ -50,14 +50,20 @@ class AgniKai():
 	# Refreshes the Game State
 	def Refresh( self ):
 		while self.playing:
-			self.game.Refresh()
-			self.FetchInfo()
+			try:
+				self.game.Refresh()
+				self.FetchInfo()
+			except:
+				pass
 
 	# Runs all base related functions
 	def Base( self ):
 		while self.playing:
 			#self.DefendBase()
-			self.BuildLoop()
+			try:
+				self.BuildLoop()
+			except:
+				pass
 
 	# Runs all the AI actions
 	def Play( self ):
@@ -175,8 +181,17 @@ class AgniKai():
 					self.game.data[ "cells" ][ cell.x + cell.y * 30 ][ "t" ] = -1
 					self.game.data[ "cells" ][ cell.x + cell.y * 30 ][ "o" ] = self.game.uid
 				return data
-			return ( False, None, "Too long to attack" )
-		return ( False, None, "Same as the last cell" )
+			return ( False, 9, "Too long to attack" )
+		return ( False, 10, "Same as the last cell" )
+
+	# Clears a cell with blast
+	def ClearCell( self, target ):
+		directions = ( ( 0, -1 ), ( 1, 0 ), ( 0, 1 ), ( -1, 0 ) )
+		for direction in directions:
+			data = self.game.Blast( target.x + direction[ 0 ], target.y + direction[ 1 ], "square" )
+			if data[ 0 ]:
+				return data
+		return data
 
 	# An implementation of attack that ensures the target is hit
 	def EnsureAttack( self, cell, boost = False ):
@@ -268,11 +283,37 @@ class AgniKai():
 	def Expand( self ):
 		if self.adjacentGoldNum > 0:
 			for target in self.adjacentGoldCells:
+				if not self.FastCell( target, boost = True ):
+					data = ( False, None, "Not enough energy or energy cells" )
+					if self.game.energyCellNum >= 1 and self.game.energy >= 80:
+						data = self.ClearCell( target )
+					elif self.game.energyCellNum >= 5 and self.game.energy >= 60:
+						data = self.ClearCell( target )
+					elif self.game.energyCellNum >= 9 and self.game.energy >= 30:
+						data = self.ClearCell( target )
+					if data[ 0 ]:
+						data = self.game.AttackCell( target.x, target.y )
+						while data[ 1 ] == 3:
+							data = self.game.AttackCell( target.x, target.y )
+						if data[ 0 ]:
+							return
 				data = self.EnsureAttack( target, boost = self.CheckBoost( target ) )
 				if data[ 0 ]:
 					return
 		if self.adjacentEnergyNum > 0:
 			for target in self.adjacentEnergyCells:
+				if not self.FastCell( target, boost = True ):
+					data = ( False, None, "Not enough energy or energy cells" )
+					if self.game.energyCellNum < 5 and self.game.energy >= 80:
+						data = self.ClearCell( target )
+					elif self.game.energyCellNum < 9 and self.game.energy >= 60:
+						data = self.ClearCell( target )
+					if data[ 0 ]:
+						data = self.game.AttackCell( target.x, target.y )
+						while data[ 1 ] == 3:
+							data = self.game.AttackCell( target.x, target.y )
+						if data[ 0 ]:
+							return
 				data = self.EnsureAttack( target, boost = self.CheckBoost( target ) )
 				if data[ 0 ]:
 					return
@@ -338,7 +379,12 @@ class AgniKai():
 
 	# The fitness function to determine what mode to switch to
 	def Fitness( self ):
-		self.mode = self.MODE_ALL
+		if self.game.energyCellNum == 0:
+			self.mode = self.MODE_RECHARGE
+		elif self.game.goldCellNum == 0:
+			self.mode = self.MODE_LOOT
+		else:
+			self.mode = self.MODE_ALL
 
 	# The intelligence to run at every tick
 	def GameLoop( self ):
@@ -348,7 +394,10 @@ class AgniKai():
 			self.boost = True
 		if self.mode == self.MODE_ALL:
 			self.AllSpark()
-		
+		elif self.mode == MODE_RECHARGE:
+			self.Recharge()
+		elif self.mode == MODE_LOOT:
+			self.Loot()		
 
 name = "Pandamonium"
 if len( sys.argv ) == 2:
