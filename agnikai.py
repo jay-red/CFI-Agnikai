@@ -4,6 +4,12 @@ from threading import Thread
 import sys
 from math import sqrt
 
+# Python 3 backwards compatibility
+try:
+    input = raw_input
+except NameError:
+    pass
+
 class AgniKai():
 	def __init__( self, name ):
 		# Initialize the Panda Colorfight Client
