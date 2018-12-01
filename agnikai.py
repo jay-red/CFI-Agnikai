@@ -14,31 +14,32 @@ class AgniKai():
 	def __init__( self, name ):
 		# Initialize the Panda Colorfight Client
 		self.game = cf.Game()
-		self.game.JoinGame( name )
 
-		# Initialize the variables
-		self.lastAttack = None
-		self.threshold = 4.0
-		self.mode = 4
-		self.sparkMode = 0
-		self.MODE_EXPAND = 0
-		self.MODE_LOOT = 1
-		self.MODE_RECHARGE = 2
-		self.MODE_ATTACK = 3
-		self.MODE_ALL = 4
+		# Attempt to join the game
+		if self.game.JoinGame( name ):
+			# Initialize the variables
+			self.lastAttack = None
+			self.threshold = 4.0
+			self.mode = 4
+			self.sparkMode = 0
+			self.MODE_EXPAND = 0
+			self.MODE_LOOT = 1
+			self.MODE_RECHARGE = 2
+			self.MODE_ATTACK = 3
+			self.MODE_ALL = 4
 
-		# Initialize the starting game state
-		self.game.Refresh()
-		self.FetchInfo()
+			# Initialize the starting game state
+			self.game.Refresh()
+			self.FetchInfo()
 
-		# Initialize the threads
-		self.playing = True
-		self.refreshThread = Thread( target = self.Refresh )
-		self.refreshThread.start()
-		self.playThread = Thread( target = self.Play )
-		self.playThread.start()
-		self.stopThread = Thread( target = self.Stop )
-		self.stopThread.start()
+			# Initialize the threads
+			self.playing = True
+			self.refreshThread = Thread( target = self.Refresh )
+			self.refreshThread.start()
+			self.playThread = Thread( target = self.Play )
+			self.playThread.start()
+			self.stopThread = Thread( target = self.Stop )
+			self.stopThread.start()
 
 	"""
 		Define the Thread Functions
