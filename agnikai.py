@@ -54,7 +54,7 @@ class AgniKai():
 
 	# Allows for keyboard interrupt
 	def Stop( self ):
-		raw_input()
+		input()
 		self.playing = False
 
 	"""
