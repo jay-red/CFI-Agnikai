@@ -1,4 +1,4 @@
-import requests
+import rapidreq as requests
 import json
 import os
 import random
