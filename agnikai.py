@@ -3,6 +3,7 @@ import random
 from threading import Thread
 import sys
 from math import sqrt
+from time import sleep
 
 # Python 3 backwards compatibility
 try:
@@ -25,8 +26,9 @@ class AgniKai():
 			self.MODE_EXPAND = 0
 			self.MODE_LOOT = 1
 			self.MODE_RECHARGE = 2
-			self.MODE_ATTACK = 3
+			self.MODE_SPECIAL = 3
 			self.MODE_ALL = 4
+			self.special = False
 
 			# Initialize the starting game state
 			self.game.Refresh()
@@ -68,7 +70,10 @@ class AgniKai():
 	# Runs all the AI actions
 	def Play( self ):
 		while self.playing:
-			self.GameLoop()
+			try:
+				self.GameLoop()
+			except:
+				pass
 
 	# Allows for keyboard interrupt
 	def Stop( self ):
@@ -193,6 +198,61 @@ class AgniKai():
 				return data
 		return data
 
+	# Gets the damage in a square
+	def GetSDamage( self, cell ):
+		totalDmg = 0
+		energyDmg = 0
+		baseDmg = 0
+		for x in range( -1, 2 ):
+			for y in range( -1, 2 ):
+				target = self.game.GetCell( cell.x + x, cell.y + y )
+				if not target == None:
+					if self.EnemyCell( cell ):
+						totalDmg += 1
+						if target.cellType == "gold":
+							totalDmg += 9
+						elif target.cellType == "energy":
+							energyDmg += 1
+						elif target.isBase:
+							baseDmg += 1
+		return ( cell, totalDmg, energyDmg, baseDmg, 0 )
+
+	# Gets the damage in a horizontal line
+	def GetHDamage( self, cell ):
+		totalDmg = 0
+		energyDmg = 0
+		baseDmg = 0
+		for x in range( -4, 5 ):
+			target = self.game.GetCell( cell.x + x, cell.y )
+			if not target == None:
+				if self.EnemyCell( cell ):
+					totalDmg += 1
+					if target.cellType == "gold":
+						totalDmg += 9
+					elif target.cellType == "energy":
+						energyDmg += 1
+					elif target.isBase:
+						baseDmg += 1
+		return ( cell, totalDmg, energyDmg, baseDmg, 1 )
+
+	# Gets the damage in a vertical line
+	def GetVDamage( self, cell ):
+		totalDmg = 0
+		energyDmg = 0
+		baseDmg = 0
+		for y in range( -4, 5 ):
+			target = self.game.GetCell( cell.x, cell.y + y )
+			if not target == None:
+				if self.EnemyCell( cell ):
+					totalDmg += 1
+					if target.cellType == "gold":
+						totalDmg += 9
+					elif target.cellType == "energy":
+						energyDmg += 1
+					elif target.isBase:
+						baseDmg += 1
+		return ( cell, totalDmg, energyDmg, baseDmg, 2 )
+
 	# An implementation of attack that ensures the target is hit
 	def EnsureAttack( self, cell, boost = False ):
 		data = self.Attack( cell, boost = self.boost )
@@ -233,10 +293,19 @@ class AgniKai():
 		self.enemyEnergyCells = []
 		self.enemyGoldNum = 0
 		self.enemyEnergyNum = 0
+
+		# Blast targets
+		self.blastTargets = []
+
+		# Iterate over the map
 		for x in range( self.game.width ):
 			for y in range( self.game.height ):
 				cell = self.game.GetCell( x, y )
 				if self.OwnCell( cell ):
+					if self.EdgeCell( cell ):
+						self.blastTargets.append( self.GetSDamage( cell ) )
+						self.blastTargets.append( self.GetHDamage( cell ) )
+						self.blastTargets.append( self.GetVDamage( cell ) )
 					if cell.isBase:
 						self.playerBases.append( cell )
 					else:
@@ -261,6 +330,12 @@ class AgniKai():
 						else:
 							self.unclaimedEnergyNum += 1
 							self.unclaimedEnergyCells.append( cell )
+		self.special = False
+		self.blastTargets.sort( key = lambda tup: ( tup[ 1 ], tup[ 2 ], tup[ 3 ] ) )
+		if self.blastTargets[ 1 ] > 0:
+			self.special = self.special or self.game.energy >= 30 and self.game.energyCellNum >= 9
+			self.special = self.special or self.game.energy >= 60 and self.game.energyCellNum >= 5
+			self.special = self.special or self.game.energy >= 80 and self.game.energyCellNum >= 1
 
 	# A smarter base building function to pick the safest location
 	def BuildLoop( self ):
@@ -283,37 +358,11 @@ class AgniKai():
 	def Expand( self ):
 		if self.adjacentGoldNum > 0:
 			for target in self.adjacentGoldCells:
-				if not self.FastCell( target, boost = True ):
-					data = ( False, None, "Not enough energy or energy cells" )
-					if self.game.energyCellNum >= 1 and self.game.energy >= 80:
-						data = self.ClearCell( target )
-					elif self.game.energyCellNum >= 5 and self.game.energy >= 60:
-						data = self.ClearCell( target )
-					elif self.game.energyCellNum >= 9 and self.game.energy >= 30:
-						data = self.ClearCell( target )
-					if data[ 0 ]:
-						data = self.game.AttackCell( target.x, target.y )
-						while data[ 1 ] == 3:
-							data = self.game.AttackCell( target.x, target.y )
-						if data[ 0 ]:
-							return
 				data = self.EnsureAttack( target, boost = self.CheckBoost( target ) )
 				if data[ 0 ]:
 					return
 		if self.adjacentEnergyNum > 0:
 			for target in self.adjacentEnergyCells:
-				if not self.FastCell( target, boost = True ):
-					data = ( False, None, "Not enough energy or energy cells" )
-					if self.game.energyCellNum < 5 and self.game.energy >= 80:
-						data = self.ClearCell( target )
-					elif self.game.energyCellNum < 9 and self.game.energy >= 60:
-						data = self.ClearCell( target )
-					if data[ 0 ]:
-						data = self.game.AttackCell( target.x, target.y )
-						while data[ 1 ] == 3:
-							data = self.game.AttackCell( target.x, target.y )
-						if data[ 0 ]:
-							return
 				data = self.EnsureAttack( target, boost = self.CheckBoost( target ) )
 				if data[ 0 ]:
 					return
@@ -377,12 +426,28 @@ class AgniKai():
 			self.Recharge()
 			self.sparkMode = self.MODE_EXPAND
 
+	# The blaster
+	def Special( self ):
+		self.special = False
+		for target in self.blastTargets:
+			direction = "square"
+			if target[ 4 ] == 1:
+				direction = "horizontal"
+			elif target[ 4 ] == 2:
+				direction = "vertical"
+			data = self.Blast( target[ 0 ].x, target[ 0 ].y, direction  )
+			if data[ 0 ]:
+				return
+
+
 	# The fitness function to determine what mode to switch to
 	def Fitness( self ):
 		if self.game.energyCellNum == 0:
 			self.mode = self.MODE_RECHARGE
 		elif self.game.goldCellNum == 0:
 			self.mode = self.MODE_LOOT
+		elif self.special:
+			self.mode = self.MODE_SPECIAL
 		else:
 			self.mode = self.MODE_ALL
 
@@ -394,10 +459,14 @@ class AgniKai():
 			self.boost = True
 		if self.mode == self.MODE_ALL:
 			self.AllSpark()
-		elif self.mode == MODE_RECHARGE:
+		elif self.mode == self.MODE_RECHARGE:
 			self.Recharge()
-		elif self.mode == MODE_LOOT:
-			self.Loot()		
+			self.Expand()
+		elif self.mode == self.MODE_LOOT:
+			self.Loot()	
+			self.Expand()
+		elif self.mode == self.MODE_SPECIAL:
+			self.Special()
 
 name = "Pandamonium"
 if len( sys.argv ) == 2:
