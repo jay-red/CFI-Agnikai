@@ -19,10 +19,13 @@ class AgniKai():
 		# Initialize the variables
 		self.lastAttack = None
 		self.threshold = 4.0
-		self.mode = 0
+		self.mode = 4
+		self.sparkMode = 0
 		self.MODE_EXPAND = 0
 		self.MODE_LOOT = 1
 		self.MODE_RECHARGE = 2
+		self.MODE_ATTACK = 3
+		self.MODE_ALL = 4
 
 		# Initialize the starting game state
 		self.game.Refresh()
@@ -91,6 +94,23 @@ class AgniKai():
 	def EnergyCell( self, cell ):
 		return cell.cellType == "energy"
 
+	# Checks if the cell is claimed
+	def Claimed( self, cell ):
+		return not cell.owner == 0
+
+	# Checks if a cell's attack time is within the threshold
+	def FastCell( self, cell, boost = False ):
+		return ( cell.takeTime <= self.threshold or ( boost and cell.takeTime <= self.threshold * 4 ) ) and not cell.takeTime == -1
+
+	# Checks if a boost should be done
+	def CheckBoost( self, cell ):
+		if self.game.energy >= 45.0 and ( self.EnergyCell( cell ) or self.GoldCell( cell ) ):
+			return True
+		elif self.game.energy >= 95.0:
+			return True
+		else:
+			return False
+
 	# Returns the cells adjacent to a specific cell
 	def GetAdjacent( self, cell ):
 		cellUp = self.game.GetCell( cell.x, cell.y - 1 )
@@ -107,9 +127,15 @@ class AgniKai():
 				if self.GoldCell( cell ):
 					self.adjacentGoldNum += 1
 					self.adjacentGoldCells.append( cell )
+					if self.FastCell( cell, boost = self.CheckBoost( cell ) ):
+						self.fastAdjacentGoldCells.append( cell )
+						self.fastAdjacentGoldNum += 1
 				elif self.EnergyCell( cell ):
 					self.adjacentEnergyNum += 1
 					self.adjacentEnergyCells.append( cell )
+					if self.FastCell( cell, boost = self.CheckBoost( cell ) ):
+						self.fastAdjacentEnergyCells.append( cell )
+						self.fastAdjacentEnergyNum += 1
 				elif self.EnemyCell( cell ):
 					self.adjacentEnemyNum += 1
 					self.adjacentEnemyCells.append( cell )
@@ -120,7 +146,7 @@ class AgniKai():
 	# A smarter implementation of the attack function
 	def Attack( self, cell, boost = False ):
 		if not self.SameCell( cell, self.lastAttack ):
-			if cell.takeTime <= self.threshold and not cell.takeTime == -1:
+			if self.FastCell( cell, boost = boost ):
 				data = self.game.AttackCell( cell.x, cell.y, boost = boost )
 				if data[ 0 ]:
 					self.lastAttack = cell
@@ -141,6 +167,8 @@ class AgniKai():
 	def FetchInfo( self ):
 		self.playerCells = []
 		self.playerBases = []
+
+		# Adjacent cell information
 		self.adjacentCells = []
 		self.adjacentNormalCells = []
 		self.adjacentGoldCells = []
@@ -150,10 +178,24 @@ class AgniKai():
 		self.adjacentGoldNum = 0
 		self.adjacentEnergyNum = 0
 		self.adjacentEnemyNum = 0
+
+		# Fast adjacent cell information
+		self.fastAdjacentGoldCells = []
+		self.fastAdjacentEnergyCells = []
+		self.fastAdjacentGoldNum = 0
+		self.fastAdjacentEnergyNum = 0
+
+		# Overall unclaimed cell information
 		self.unclaimedGoldCells = []
 		self.unclaimedEnergyCells = []
 		self.unclaimedGoldNum = 0
 		self.unclaimedEnergyNum = 0
+
+		# Claimed enemy cell information
+		self.enemyGoldCells = []
+		self.enemyEnergyCells = []
+		self.enemyGoldNum = 0
+		self.enemyEnergyNum = 0
 		for x in range( self.game.width ):
 			for y in range( self.game.height ):
 				cell = self.game.GetCell( x, y )
@@ -169,51 +211,91 @@ class AgniKai():
 					self.CheckAdjacent( cellLeft )
 				else:
 					if self.GoldCell( cell ):
-						self.unclaimedGoldNum += 1
-						self.unclaimedGoldCells.append( cell )
+						if self.Claimed( cell ):
+							self.enemyGoldCells.append( cell )
+							self.enemyGoldNum += 1
+						else:
+							self.unclaimedGoldNum += 1
+							self.unclaimedGoldCells.append( cell )
 					elif self.EnergyCell( cell ):
-						self.unclaimedEnergyNum += 1
-						self.unclaimedEnergyCells.append( cell )
+						if self.Claimed( cell ):
+							self.enemyEnergyCells.append( cell )
+							self.enemyEnergyNum += 1
+						else:
+							self.unclaimedEnergyNum += 1
+							self.unclaimedEnergyCells.append( cell )
 
 	# Expansion mode
 	def Expand( self ):
 		if self.adjacentGoldNum > 0:
 			for target in self.adjacentGoldCells:
-				data = self.EnsureAttack( target, boost = self.boost )
+				data = self.EnsureAttack( target, boost = self.CheckBoost( target ) )
 				if data[ 0 ]:
 					return
 		if self.adjacentEnergyNum > 0:
 			for target in self.adjacentEnergyCells:
-				data = self.EnsureAttack( target, boost = self.boost )
+				data = self.EnsureAttack( target, boost = self.CheckBoost( target ) )
 				if data[ 0 ]:
 					return
 		if self.adjacentEnemyNum > 0 and ( self.adjacentNormalNum == 0 or random.randrange( 4 ) == 0 ):
 			while self.adjacentEnemyNum > 0:
 				target = self.adjacentEnemyCells.pop( random.randrange( self.adjacentEnemyNum ) )
 				self.adjacentEnemyNum -= 1
-				data = self.EnsureAttack( target, boost = self.boost )
+				data = self.EnsureAttack( target, boost = self.CheckBoost( target ) )
 				if data[ 0 ]:
 					return
 		elif self.adjacentNormalNum > 0:
 			while self.adjacentNormalNum > 0:
 				target = self.adjacentNormalCells.pop( random.randrange( self.adjacentNormalNum ) )
 				self.adjacentNormalNum -= 1
-				data = self.EnsureAttack( target, boost = self.boost )
+				data = self.EnsureAttack( target, boost = self.CheckBoost( target ) )
 				if data[ 0 ]:
 					return
 
-	# Recharge mode
-	def Recharge( self ):
+	# Attacks the cell closest to any cell in a list of targets
+	def Pursue( self, targets ):
 		targetCells = []
-		for targetEnergy in self.unclaimedEnergyCells:
+		for target in targets:
 			for adjacent in self.adjacentCells:
-				targetCells.append( ( adjacent, self.PerimeterDistance( targetEnergy, adjacent ), self.DiagonalDistance( targetEnergy, adjacent ) ) )
+				targetCells.append( ( adjacent, self.PerimeterDistance( target, adjacent ), self.DiagonalDistance( target, adjacent ) ) )
 		targetCells.sort( key = lambda tup: ( tup[ 1 ], tup[ 2 ] ) )
 		for target in targetCells:
 			target = target[ 0 ]
-			data = self.EnsureAttack( target, boost = self.boost )
+			data = self.EnsureAttack( target, boost = self.CheckBoost( target ) )
 			if data[ 0 ]:
 				return
+
+	# Attacks the cell closest to an energy cell
+	def Recharge( self ):
+		if self.unclaimedEnergyNum > 0:
+			self.Pursue( self.unclaimedEnergyCells )
+		else:
+			self.Pursue( self.enemyEnergyCells )
+
+	# Attacks the cell closest to a gold cell
+	def Loot( self ):
+		if self.unclaimedGoldNum > 0:
+			self.Pursue( self.unclaimedGoldCells )
+		else:
+			self.Pursue( self.enemyGoldCells )
+
+	# Expands, Loots, and Recharges all in one
+	def AllSpark( self ):
+		if self.fastAdjacentEnergyNum > 0 or self.fastAdjacentGoldNum > 0 or self.sparkMode == self.MODE_EXPAND:
+			self.Expand()
+			if self.unclaimedGoldNum > 0 or self.enemyGoldNum > 0:
+				self.sparkMode = self.MODE_LOOT
+			elif self.unclaimedEnergyNum > 0 or self.enemyEnergyNum > 0:
+				self.sparkMode = self.MODE_RECHARGE
+		elif self.sparkMode == self.MODE_LOOT:
+			self.Loot()
+			if self.unclaimedEnergyNum > 0 or self.enemyEnergyNum > 0:
+				self.sparkMode = self.MODE_RECHARGE
+			else:
+				self.sparkMode = self.MODE_EXPAND
+		elif self.sparkMode == self.MODE_RECHARGE:
+			self.Recharge()
+			self.sparkMode = self.MODE_EXPAND
 
 	# The intelligence to run at every tick
 	def GameLoop( self ):
@@ -223,15 +305,9 @@ class AgniKai():
 		if self.game.gold >= 60.0 and self.game.baseNum < 3:
 			newBase = random.choice( self.playerCells )
 			self.game.BuildBase( newBase.x, newBase.y )
-		if self.mode == self.MODE_EXPAND:
-			self.Expand()
-			if self.unclaimedEnergyNum > 0:
-				self.mode = self.MODE_RECHARGE
-		elif self.mode == self.MODE_LOOT:
-			pass
-		elif self.mode == self.MODE_RECHARGE:
-			self.Recharge()
-			self.mode = self.MODE_EXPAND		
+		if self.mode == self.MODE_ALL:
+			self.AllSpark()
+		
 
 name = "Pandamonium"
 if len( sys.argv ) == 2:
