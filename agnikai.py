@@ -20,7 +20,7 @@ class AgniKai():
 			# Initialize the variables
 			self.lastAttack = None
 			self.threshold = 4.0
-			self.mode = 4
+			self.mode = 0
 			self.sparkMode = 0
 			self.MODE_EXPAND = 0
 			self.MODE_LOOT = 1
@@ -38,6 +38,8 @@ class AgniKai():
 			self.refreshThread.start()
 			self.playThread = Thread( target = self.Play )
 			self.playThread.start()
+			self.baseThread = Thread( target = self.Base )
+			self.baseThread.start()
 			self.stopThread = Thread( target = self.Stop )
 			self.stopThread.start()
 
@@ -50,6 +52,12 @@ class AgniKai():
 		while self.playing:
 			self.game.Refresh()
 			self.FetchInfo()
+
+	# Runs all base related functions
+	def Base( self ):
+		while self.playing:
+			#self.DefendBase()
+			self.BuildLoop()
 
 	# Runs all the AI actions
 	def Play( self ):
@@ -103,6 +111,19 @@ class AgniKai():
 	def FastCell( self, cell, boost = False ):
 		return ( cell.takeTime <= self.threshold or ( boost and cell.takeTime <= self.threshold * 4 ) ) and not cell.takeTime == -1
 
+	# Checks if a cell has any adjacent enemy or unclaimed cells
+	def EdgeCell( self, cell ):
+		cellUp, cellRight, cellDown, cellLeft = self.GetAdjacent( cell )
+		if not cellUp == None and not self.OwnCell( cellUp ):
+			return True
+		elif not cellRight == None and not self.OwnCell( cellRight ):
+			return True
+		elif not cellDown == None and not self.OwnCell( cellDown ):
+			return True
+		elif not cellLeft == None and not self.OwnCell( cellLeft ):
+			return True
+		return False
+
 	# Checks if a boost should be done
 	def CheckBoost( self, cell ):
 		if self.game.energy >= 45.0 and ( self.EnergyCell( cell ) or self.GoldCell( cell ) ):
@@ -120,7 +141,7 @@ class AgniKai():
 		cellLeft = self.game.GetCell( cell.x - 1, cell.y )
 		return ( cellUp, cellRight, cellDown, cellLeft )
 
-	# Checks the cell and updates the game state
+	# Checks the adjacent cell and updates the game state
 	def CheckAdjacent( self, cell ):
 		if not cell == None:
 			if not self.OwnCell( cell ):
@@ -226,6 +247,23 @@ class AgniKai():
 							self.unclaimedEnergyNum += 1
 							self.unclaimedEnergyCells.append( cell )
 
+	# A smarter base building function to pick the safest location
+	def BuildLoop( self ):
+		if self.game.gold >= 60.0 and self.game.baseNum < 3:
+			targetCells = []
+			for playerCell in self.playerCells:
+				if not self.EdgeCell( playerCell ):
+					distances = []
+					for base in self.playerBases:
+						distances.append( self.PerimeterDistance( base, playerCell ) )
+					targetCells.append( ( playerCell, min( distances ) ) )
+			targetCells.sort( key = lambda tup: tup[ 1 ], reverse = True )
+			for target in targetCells:
+				target = target[ 0 ]
+				data = self.game.BuildBase( target.x, target.y )
+				if data[ 0 ]:
+					return
+
 	# Expansion mode
 	def Expand( self ):
 		if self.adjacentGoldNum > 0:
@@ -298,14 +336,16 @@ class AgniKai():
 			self.Recharge()
 			self.sparkMode = self.MODE_EXPAND
 
+	# The fitness function to determine what mode to switch to
+	def Fitness( self ):
+		self.mode = self.MODE_ALL
+
 	# The intelligence to run at every tick
 	def GameLoop( self ):
+		self.Fitness()
 		self.boost = False
 		if self.game.energy >= 95.0:
 			self.boost = True
-		if self.game.gold >= 60.0 and self.game.baseNum < 3:
-			newBase = random.choice( self.playerCells )
-			self.game.BuildBase( newBase.x, newBase.y )
 		if self.mode == self.MODE_ALL:
 			self.AllSpark()
 		
