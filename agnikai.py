@@ -332,7 +332,7 @@ class AgniKai():
 							self.unclaimedEnergyCells.append( cell )
 		self.special = False
 		self.blastTargets.sort( key = lambda tup: ( tup[ 1 ], tup[ 2 ], tup[ 3 ] ) )
-		if self.blastTargets[ 1 ] > 0:
+		if int( self.blastTargets[ 1 ] ) > 0:
 			self.special = self.special or self.game.energy >= 30 and self.game.energyCellNum >= 9
 			self.special = self.special or self.game.energy >= 60 and self.game.energyCellNum >= 5
 			self.special = self.special or self.game.energy >= 80 and self.game.energyCellNum >= 1
