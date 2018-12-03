@@ -200,58 +200,64 @@ class AgniKai():
 
 	# Gets the damage in a square
 	def GetSDamage( self, cell ):
-		totalDmg = 0
+		goldDmg = 0
 		energyDmg = 0
 		baseDmg = 0
+		normalDmg = 0
 		for x in range( -1, 2 ):
 			for y in range( -1, 2 ):
 				target = self.game.GetCell( cell.x + x, cell.y + y )
 				if not target == None:
-					if self.EnemyCell( cell ):
-						totalDmg += 1
+					if self.EnemyCell( target ):
 						if target.cellType == "gold":
-							totalDmg += 9
+							goldDmg += 1
 						elif target.cellType == "energy":
 							energyDmg += 1
 						elif target.isBase:
 							baseDmg += 1
-		return ( cell, totalDmg, energyDmg, baseDmg, 0 )
+						else:
+							normalDmg += 1
+		return ( cell, goldDmg, energyDmg, baseDmg, normalDmg, 0 )
 
 	# Gets the damage in a horizontal line
 	def GetHDamage( self, cell ):
-		totalDmg = 0
+		goldDmg = 0
 		energyDmg = 0
 		baseDmg = 0
+		normalDmg = 0
 		for x in range( -4, 5 ):
 			target = self.game.GetCell( cell.x + x, cell.y )
 			if not target == None:
-				if self.EnemyCell( cell ):
-					totalDmg += 1
+				if self.EnemyCell( target ):
 					if target.cellType == "gold":
-						totalDmg += 9
+						goldDmg += 1
 					elif target.cellType == "energy":
 						energyDmg += 1
 					elif target.isBase:
 						baseDmg += 1
-		return ( cell, totalDmg, energyDmg, baseDmg, 1 )
+					else:
+						normalDmg += 1
+		return ( cell, goldDmg, energyDmg, baseDmg, normalDmg, 1 )
 
 	# Gets the damage in a vertical line
 	def GetVDamage( self, cell ):
-		totalDmg = 0
+		goldDmg = 0
 		energyDmg = 0
 		baseDmg = 0
+		normalDmg = 0
 		for y in range( -4, 5 ):
 			target = self.game.GetCell( cell.x, cell.y + y )
 			if not target == None:
-				if self.EnemyCell( cell ):
-					totalDmg += 1
+				if self.EnemyCell( target ):
 					if target.cellType == "gold":
-						totalDmg += 9
+						goldDmg += 1
 					elif target.cellType == "energy":
 						energyDmg += 1
 					elif target.isBase:
 						baseDmg += 1
-		return ( cell, totalDmg, energyDmg, baseDmg, 2 )
+					else:
+						normalDmg += 1
+		return ( cell, goldDmg, energyDmg, baseDmg, normalDmg, 2 )
 
 	# An implementation of attack that ensures the target is hit
 	def EnsureAttack( self, cell, boost = False ):
@@ -331,9 +337,14 @@ class AgniKai():
 							self.unclaimedEnergyNum += 1
 							self.unclaimedEnergyCells.append( cell )
 		self.special = False
-		self.blastTargets.sort( key = lambda tup: ( tup[ 1 ], tup[ 2 ], tup[ 3 ] ) )
-		if self.blastTargets[ 0 ][ 1 ] > 0:
-			self.special = self.special or self.game.energy >= 30 and self.game.energyCellNum >= 9
+		self.blastTargets.sort( key = lambda tup: ( tup[ 1 ], tup[ 2 ], tup[ 3 ], tup[ 4 ] ), reverse = True )
+		print( self.blastTargets[ 0 ] )
+		targetCheck = False
+		targetCheck = targetCheck or self.blastTargets[ 0 ][ 1 ] > 0
+		targetCheck = targetCheck or self.blastTargets[ 0 ][ 2 ] > 0
+		targetCheck = targetCheck or self.blastTargets[ 0 ][ 3 ] > 0
+		if targetCheck:
+			#self.special = self.special or self.game.energy >= 30 and self.game.energyCellNum >= 9
 			self.special = self.special or self.game.energy >= 60 and self.game.energyCellNum >= 5
 			self.special = self.special or self.game.energy >= 80 and self.game.energyCellNum >= 1
 
@@ -428,15 +439,25 @@ class AgniKai():
 
 	# The blaster
 	def Special( self ):
+		print( "special" )
 		self.special = False
 		for target in self.blastTargets:
 			direction = "square"
-			if target[ 4 ] == 1:
+			if target[ 5 ] == 1:
 				direction = "horizontal"
-			elif target[ 4 ] == 2:
+			elif target[ 5 ] == 2:
 				direction = "vertical"
-			data = self.Blast( target[ 0 ].x, target[ 0 ].y, direction  )
+			targetCheck = False
+			targetCheck = targetCheck or target[ 1 ] > 0
+			targetCheck = targetCheck or target[ 2 ] > 0
+			targetCheck = targetCheck or target[ 3 ] > 0
+			if not targetCheck:
+				return
+			data = self.game.Blast( target[ 0 ].x, target[ 0 ].y, direction )
+			while data[ 1 ] == 3:
+				data = self.game.Blast( target[ 0 ].x, target[ 0 ].y, direction )
 			if data[ 0 ]:
+				sleep( 1 )
 				return
 
 
@@ -467,6 +488,7 @@ class AgniKai():
 			self.Expand()
 		elif self.mode == self.MODE_SPECIAL:
 			self.Special()
+			self.Expand()
 
 name = "Pandamonium"
 if len( sys.argv ) == 2:
