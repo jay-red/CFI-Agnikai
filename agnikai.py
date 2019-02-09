@@ -153,11 +153,11 @@ class AgniKai():
 			return False
 
 	def CheckMulti( self ):
-		if self.danger:
-			return False
-		if self.game.goldCellNum >= 3:
-			if self.game.baseNum == 3 and self.game.gold >= 75:
-				return True
+		#if self.danger:
+		#	return False
+		#if self.game.goldCellNum >= 3:
+		#	if self.game.baseNum == 3 and self.game.gold >= 75:
+		#		return True
 		return False
 
 	# Returns the cells adjacent to a specific cell
